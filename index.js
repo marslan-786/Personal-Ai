@@ -18,12 +18,12 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('🍃 Memory Database: Connected & Active'))
   .catch(err => console.error('❌ Database Connection Error:', err));
 
-// Chat Schema (یادداشت کا ڈھانچہ)
+// Chat Schema
 const chatSchema = new mongoose.Schema({
     sessionId: { type: String, required: true, unique: true },
     messages: [
         {
-            role: String, // 'user' or 'assistant'
+            role: String,
             content: String,
             timestamp: { type: Date, default: Date.now }
         }
@@ -31,58 +31,70 @@ const chatSchema = new mongoose.Schema({
 });
 const Chat = mongoose.model('Chat', chatSchema);
 
-// --- AI CHAT LOGIC WITH MEMORY ---
-
+// --- AI CHAT LOGIC (STREAMING & PERSONALITY) ---
 app.post('/api/chat', async (req, res) => {
     const { message, sessionId } = req.body;
 
     try {
-        // 1. ڈیٹا بیس سے اس سیشن کی پرانی یادداشت تلاش کریں
         let userChat = await Chat.findOne({ sessionId });
-        if (!userChat) {
-            userChat = new Chat({ sessionId, messages: [] });
-        }
+        if (!userChat) userChat = new Chat({ sessionId, messages: [] });
 
-        // 2. یوزر کا نیا میسج ہسٹری میں ڈالیں
         userChat.messages.push({ role: 'user', content: message });
 
-        // 3. AI کو بھیجنے کے لیے پوری ہسٹری تیار کریں
-        // چونکہ آپ کے پاس 32GB RAM ہے، ہم لمبی ہسٹری بھیج سکتے ہیں
-        const historyForAI = userChat.messages.map(msg => ({
-            role: msg.role,
-            content: msg.content
-        }));
+        // اے آئی کی شخصیت اور اردو املا کی درستی
+        const systemPrompt = {
+            role: 'system',
+            content: "تمہارا نام 'Pro Coder' ہے۔ تم ایک نہایت ذہین اردو ڈویلپر ہو۔ ہمیشہ درست اردو املا استعمال کرو (مثلاً ارسلان 'س' سے لکھو 'ص' سے نہیں، اور 'جڑے' استعمال کرو 'جوڑے' نہیں)۔ جواب نہایت پیشہ ورانہ ہونا چاہیے۔"
+        };
 
-        // 4. Ollama (Llama 3.1) کو کال کریں
+        const historyForAI = [systemPrompt, ...userChat.messages.map(msg => ({
+            role: msg.role, content: msg.content
+        }))];
+
+        // اسٹریمنگ رسپانس کے لیے ہیڈرز
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Transfer-Encoding', 'chunked');
+
         const aiResponse = await axios.post(`${process.env.OLLAMA_URL}/api/chat`, {
             model: "llama3.1:8b",
             messages: historyForAI,
-            stream: false,
-            options: {
-                num_ctx: 32768 // 32GB RAM کی وجہ سے ہم Context Window کو بڑا کر رہے ہیں
+            stream: true,
+            options: { num_ctx: 32768 }
+        }, { responseType: 'stream' });
+
+        let fullReply = "";
+
+        aiResponse.data.on('data', (chunk) => {
+            const lines = chunk.toString().split('\n');
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const json = JSON.parse(line);
+                    if (json.message && json.message.content) {
+                        const content = json.message.content;
+                        fullReply += content;
+                        res.write(content); // فرنٹ اینڈ کو ایک ایک لفظ بھیجنا
+                    }
+                } catch (e) { }
             }
         });
 
-        const botReply = aiResponse.data.message.content;
-
-        // 5. AI کا جواب بھی یادداشت (DB) میں محفوظ کریں
-        userChat.messages.push({ role: 'assistant', content: botReply });
-        await userChat.save();
-
-        // 6. جواب واپس بھیجیں
-        res.json({ reply: botReply });
+        aiResponse.data.on('end', async () => {
+            userChat.messages.push({ role: 'assistant', content: fullReply });
+            await userChat.save();
+            res.end();
+        });
 
     } catch (error) {
-        console.error('❌ Chat Error:', error.message);
-        res.status(500).json({ reply: "یار، سرور میں کچھ مسئلہ آ رہا ہے، لیکن میں یادداشت بچانے کی کوشش کر رہا ہوں۔" });
+        console.error('❌ AI Error:', error.message);
+        res.status(500).end("سرور میں مسئلہ ہے۔");
     }
 });
 
-// ہوم پیج روٹ
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 AI Engine Started on Port ${PORT}`);
+    console.log(`🚀 Pro Coder Engine Started on Port ${PORT}`);
 });
