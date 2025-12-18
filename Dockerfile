@@ -15,8 +15,12 @@ RUN npm install
 # Copy the rest of the code
 COPY . .
 
-# Create a startup script to run both Ollama and Node
-RUN echo '#!/bin/bash\nollama serve & sleep 10 && ollama pull llama3.1:8b && npm start' > start.sh
+# Create a startup script
+# 1. Ollama اسٹارٹ کرے گا
+# 2. Llama 3.1 (ٹیکسٹ اور کوڈ کے لیے) ڈاؤن لوڈ کرے گا
+# 3. Llava (تصویروں کو سمجھنے کے لیے) ڈاؤن لوڈ کرے گا
+# 4. آخر میں آپ کا سرور چلائے گا
+RUN echo '#!/bin/bash\nollama serve & sleep 10 && ollama pull llama3.1:8b && ollama pull llava:8b && npm start' > start.sh
 RUN chmod +x start.sh
 
 # Expose the port
