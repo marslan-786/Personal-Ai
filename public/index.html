@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ur">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,23 +10,25 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
     <style>
-        body { background: #0d1117; color: #e6edf3; overflow: hidden; }
-        .chat-container { height: calc(100vh - 180px); overflow-y: auto; scroll-behavior: smooth; }
-        #user-input { min-height: 50px; max-height: 200px; resize: none; transition: height 0.2s; }
-        .dot-loading { display: flex; gap: 4px; padding: 10px; animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-        footer { position: fixed; bottom: 0; width: 100%; background: #0d1117; z-index: 100; border-top: 1px solid #30363d; }
+        body { background: #0d1117; color: #e6edf3; font-family: sans-serif; }
+        .chat-container { height: calc(100vh - 160px); overflow-y: auto; padding-bottom: 50px; }
+        #user-input { min-height: 44px; max-height: 200px; resize: none; background: transparent; }
+        footer { position: fixed; bottom: 0; width: 100%; background: #0d1117; padding: 10px; border-top: 1px solid #30363d; }
+        .dot-bounce { display: flex; gap: 4px; padding: 10px; }
+        .dot-bounce span { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: bounce 1s infinite alternate; }
+        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+        /* Hide scrollbar but keep functionality */
+        ::-webkit-scrollbar { width: 0px; }
     </style>
 </head>
 <body class="flex flex-col h-screen">
 
-    <header class="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900">
-        <div class="flex items-center gap-4">
+    <header class="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900 shadow-md">
+        <div class="flex items-center gap-3">
             <button onclick="toggleSidebar()" class="text-xl"><i class="fas fa-bars"></i></button>
-            <h1 class="text-lg font-bold text-green-500">MY AI</h1>
+            <h1 class="text-lg font-bold text-green-500">PRO CODER</h1>
         </div>
-        
-        <select id="mode-selector" class="bg-gray-800 text-xs border border-gray-700 rounded-lg p-2 outline-none focus:border-green-500">
+        <select id="mode-selector" class="bg-gray-800 text-sm border border-gray-700 rounded-lg p-2 text-white outline-none">
             <option value="chat">😊 Chat Mode</option>
             <option value="pro">💻 Pro Coder Mode</option>
         </select>
@@ -35,11 +37,15 @@
     <main id="chat-box" class="flex-1 p-4 chat-container space-y-6"></main>
 
     <footer class="p-4">
-        <div class="max-w-4xl mx-auto flex items-end gap-2 bg-gray-800 rounded-2xl p-2 border border-gray-700">
-            <button class="p-3 text-gray-400 hover:text-green-500"><i class="fas fa-plus"></i></button>
-            <textarea id="user-input" placeholder="یہاں لکھیں... (Shift+Enter نئی لائن کے لیے)" 
-                      class="flex-1 bg-transparent border-none outline-none p-2 text-sm text-white"></textarea>
-            <button onclick="sendMessage()" class="bg-green-600 p-3 rounded-xl hover:bg-green-500"><i class="fas fa-paper-plane"></i></button>
+        <div class="max-w-4xl mx-auto flex items-end gap-2 bg-gray-800 rounded-2xl p-2 border border-gray-700 shadow-2xl">
+            <input type="file" id="file-input" class="hidden" accept="image/*, .pdf, .txt, .js, .py">
+            <button onclick="document.getElementById('file-input').click()" class="p-3 text-gray-400 hover:text-green-500 transition"><i class="fas fa-plus"></i></button>
+            
+            <textarea id="user-input" placeholder="Type a message..." class="flex-1 border-none outline-none p-2 text-white"></textarea>
+            
+            <button id="action-btn" onclick="handleAction()" class="bg-green-600 p-3 rounded-xl hover:bg-green-500 transition text-white">
+                <i id="action-icon" class="fas fa-paper-plane"></i>
+            </button>
         </div>
     </footer>
 
