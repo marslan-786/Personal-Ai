@@ -2,20 +2,38 @@ const chatBox = document.getElementById('chat-box');
 const userInput = document.getElementById('user-input');
 const actionBtn = document.getElementById('action-btn');
 const actionIcon = document.getElementById('action-icon');
+const sidebar = document.getElementById('sidebar');
+const imagePreview = document.getElementById('image-preview');
 let abortController = null;
+let selectedImageBase64 = null;
 
-// Textarea Auto-height
+// سائیڈ بار ٹوگل فنکشن
+function toggleSidebar() {
+    sidebar.classList.toggle('active');
+}
+
+// امیج پری ویو اور بیس 64 میں کنورٹ کرنا
+function previewImage(event) {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            imagePreview.src = e.target.result;
+            imagePreview.style.display = 'block';
+            selectedImageBase64 = e.target.result.split(',')[1];
+        }
+        reader.readAsDataURL(file);
+    }
+}
+
 userInput.addEventListener('input', function() {
     this.style.height = 'auto';
     this.style.height = (this.scrollHeight) + 'px';
 });
 
-// Mobile-friendly: Enter does NOT send, only button sends
-// (Removed keydown send logic as per your request)
-
 async function handleAction() {
     if (abortController) {
-        abortController.abort(); // Stop generating
+        abortController.abort();
         return;
     }
     sendMessage();
@@ -23,13 +41,13 @@ async function handleAction() {
 
 async function sendMessage() {
     const text = userInput.value.trim();
-    if (!text) return;
+    if (!text && !selectedImageBase64) return;
 
     appendMessage('user', text);
     userInput.value = '';
     userInput.style.height = 'auto';
+    imagePreview.style.display = 'none';
 
-    // UI Change: Send to Stop
     abortController = new AbortController();
     actionIcon.className = "fas fa-stop";
     actionBtn.classList.replace("bg-green-600", "bg-red-600");
@@ -42,9 +60,16 @@ async function sendMessage() {
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, sessionId: "session-123", mode: document.getElementById('mode-selector').value }),
+            body: JSON.stringify({ 
+                message: text || "Analyze this image", 
+                sessionId: "user-1", 
+                mode: document.getElementById('mode-selector').value,
+                image: selectedImageBase64 
+            }),
             signal: abortController.signal
         });
+
+        selectedImageBase64 = null; // میسج بھیجنے کے بعد امیج صاف کریں
 
         const reader = response.body.getReader();
         let botText = "";
@@ -54,17 +79,14 @@ async function sendMessage() {
             if (dots) dots.remove();
 
             botText += new TextDecoder().decode(value);
-            // Rendered word-by-word feel
             botTextDiv.innerHTML = marked.parse(botText);
             
-            // 🔥 Automatic Scroll to bottom
-            chatBox.scrollTo(0, chatBox.scrollHeight);
-            
-            applyCodeFixes(botTextDiv);
+            // سمارٹ سکرولنگ: میسج کو ان پٹ سے تھوڑا اوپر لانا
+            chatBox.scrollTop = chatBox.scrollHeight;
         }
     } catch (e) {
-        if (e.name === 'AbortError') botTextDiv.innerHTML += " *[Stopped by user]*";
-        else botTextDiv.innerHTML = "Error!";
+        if (e.name === 'AbortError') botTextDiv.innerHTML += " [Stopped]";
+        else botTextDiv.innerHTML = "Server Error! (Check logs)";
     } finally {
         resetActionBtn();
     }
@@ -79,14 +101,12 @@ function resetActionBtn() {
 function appendMessage(role, text) {
     const div = document.createElement('div');
     div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
-    div.innerHTML = `<div class="max-w-[85%] p-4 rounded-2xl ${role === 'user' ? 'bg-green-700 shadow-lg' : 'bg-gray-800 border border-gray-700 shadow-md'}">${text}</div>`;
+    div.innerHTML = `<div class="max-w-[85%] p-4 rounded-2xl ${role === 'user' ? 'bg-green-700' : 'bg-gray-800 border border-gray-700'}">${text}</div>`;
     chatBox.appendChild(div);
-    chatBox.scrollTo(0, chatBox.scrollHeight);
+    chatBox.scrollTop = chatBox.scrollHeight;
     return div;
 }
 
 function applyCodeFixes(container) {
-    container.querySelectorAll('pre').forEach(block => {
-        hljs.highlightAll();
-    });
+    container.querySelectorAll('pre').forEach(block => hljs.highlightAll());
 }
