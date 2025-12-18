@@ -2,22 +2,25 @@ const chatContainer = document.getElementById('chat-container');
 const userInput = document.getElementById('user-input');
 const actionBtn = document.getElementById('action-btn');
 const actionIcon = document.getElementById('action-icon');
+const previewBox = document.getElementById('preview-box');
+const sidebar = document.getElementById('sidebar');
 const historyList = document.getElementById('history-list');
+
 let abortController = null;
 let selectedImageBase64 = null;
-let sessionId = "S-" + Math.floor(Math.random() * 10000);
+let sessionId = "S-" + Math.floor(Math.random() * 100000);
 
-window.onload = () => { loadHistory(); };
+window.onload = loadHistory;
 
-function toggleSidebar() { document.getElementById('sidebar').classList.toggle('active'); }
+function toggleSidebar() { sidebar.classList.toggle('active'); }
 
-function previewImage(event) {
+function handleFileSelect(event) {
     const file = event.target.files[0];
     if (file) {
         const reader = new FileReader();
         reader.onload = (e) => {
             document.getElementById('image-preview').src = e.target.result;
-            document.getElementById('image-preview-container').style.display = 'block';
+            previewBox.style.display = 'block';
             selectedImageBase64 = e.target.result.split(',')[1];
         };
         reader.readAsDataURL(file);
@@ -26,17 +29,27 @@ function previewImage(event) {
 
 function clearPreview() {
     selectedImageBase64 = null;
-    document.getElementById('image-preview-container').style.display = 'none';
+    previewBox.style.display = 'none';
 }
 
 function scrollToBottom() {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
+chatContainer.addEventListener('scroll', () => {
+    const btn = document.getElementById('scroll-btn');
+    if (chatContainer.scrollHeight - chatContainer.scrollTop > 800) btn.style.display = 'flex';
+    else btn.style.display = 'none';
+});
+
 async function loadHistory() {
     const res = await fetch('/api/history');
     const data = await res.json();
-    historyList.innerHTML = data.map(chat => `<div class="p-2 bg-gray-800 rounded mb-1 cursor-pointer truncate">${chat.messages[0]?.content.substring(0,25) || "New Chat"}</div>`).join('');
+    historyList.innerHTML = data.map(chat => `
+        <div class="p-3 bg-gray-800 rounded-lg border border-gray-700 truncate mb-2">
+            ${chat.messages[0]?.content.substring(0, 30) || "Chat Session"}
+        </div>
+    `).join('');
 }
 
 async function handleAction() {
@@ -48,13 +61,14 @@ async function sendMessage() {
     const text = userInput.value.trim();
     if (!text && !selectedImageBase64) return;
 
-    let displayHTML = selectedImageBase64 ? `<img src="data:image/png;base64,${selectedImageBase64}" class="w-full rounded-lg mb-2">` : "";
-    displayHTML += `<div>${text}</div>`;
-    appendBubble('user', displayHTML);
+    // یوزر ببل میں پکچر دکھانا
+    let userHTML = selectedImageBase64 ? `<img src="data:image/png;base64,${selectedImageBase64}" class="chat-img">` : "";
+    userHTML += `<div>${text || "Analyze this image"}</div>`;
+    appendBubble('user', userHTML);
 
-    const imgToSend = selectedImageBase64;
+    const imgData = selectedImageBase64;
     userInput.value = '';
-    userInput.style.height = "auto";
+    userInput.style.height = 'auto';
     clearPreview();
 
     abortController = new AbortController();
@@ -68,25 +82,25 @@ async function sendMessage() {
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, sessionId, mode: document.getElementById('mode-selector').value, image: imgToSend }),
+            body: JSON.stringify({ message: text, sessionId, mode: document.getElementById('mode-selector').value, image: imgData }),
             signal: abortController.signal
         });
 
         const reader = response.body.getReader();
-        let replyText = "";
-        botDiv.querySelector('.flex').remove(); // لوڈنگ ڈاٹس ہٹائیں
+        let fullReply = "";
+        botDiv.querySelector('.flex').remove(); // ڈاٹس ہٹائیں
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            replyText += new TextDecoder().decode(value);
-            botTextDiv.innerHTML = marked.parse(replyText);
+            fullReply += new TextDecoder().decode(value);
+            botTextDiv.innerHTML = marked.parse(fullReply);
             scrollToBottom();
             hljs.highlightAll();
         }
         loadHistory();
     } catch (e) {
-        botTextDiv.innerHTML = e.name === 'AbortError' ? "Stopped." : "Error! Try again.";
+        botTextDiv.innerHTML = e.name === 'AbortError' ? "Stopped." : "Error connection! 😫";
     } finally {
         resetBtn();
     }
