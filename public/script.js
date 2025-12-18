@@ -2,24 +2,23 @@ const chatContainer = document.getElementById('chat-container');
 const userInput = document.getElementById('user-input');
 const actionBtn = document.getElementById('action-btn');
 const actionIcon = document.getElementById('action-icon');
-const previewBox = document.getElementById('preview-box');
-const historyList = document.getElementById('history-list');
+const sidebar = document.getElementById('sidebar');
 
 let abortController = null;
 let selectedImageBase64 = null;
-let sessionId = "S-" + Math.floor(Math.random() * 100000);
+let sessionId = "S-" + Math.floor(Math.random() * 10000);
 
 window.onload = loadHistory;
 
-function toggleSidebar() { document.getElementById('sidebar').classList.toggle('active'); }
+function toggleSidebar() { sidebar.classList.toggle('active'); }
 
-function handleFile(event) {
+function handleFileSelect(event) {
     const file = event.target.files[0];
     if (file) {
         const reader = new FileReader();
         reader.onload = (e) => {
             document.getElementById('image-preview').src = e.target.result;
-            previewBox.style.display = 'block';
+            document.getElementById('preview-box').style.display = 'block';
             selectedImageBase64 = e.target.result.split(',')[1];
         };
         reader.readAsDataURL(file);
@@ -28,7 +27,7 @@ function handleFile(event) {
 
 function clearPreview() {
     selectedImageBase64 = null;
-    previewBox.style.display = 'none';
+    document.getElementById('preview-box').style.display = 'none';
 }
 
 function scrollToBottom() {
@@ -43,7 +42,7 @@ chatContainer.addEventListener('scroll', () => {
 async function loadHistory() {
     const res = await fetch('/api/history');
     const data = await res.json();
-    historyList.innerHTML = data.map(chat => `<div class="p-2 bg-gray-800 rounded mb-1 truncate">${chat.messages[0]?.content || "Chat Session"}</div>`).join('');
+    document.getElementById('history-list').innerHTML = data.map(chat => `<div class="p-2 bg-gray-800 rounded mb-1 truncate text-xs">${chat.messages[0]?.content || "Image Chat"}</div>`).join('');
 }
 
 async function handleAction() {
@@ -55,7 +54,6 @@ async function sendMessage() {
     const text = userInput.value.trim();
     if (!text && !selectedImageBase64) return;
 
-    // یوزر ببل میں امیج اور ٹیکسٹ دکھانا
     let userHTML = selectedImageBase64 ? `<img src="data:image/png;base64,${selectedImageBase64}" class="chat-img">` : "";
     userHTML += `<div>${text || "Analyze Image"}</div>`;
     appendBubble('user', userHTML);
@@ -69,8 +67,9 @@ async function sendMessage() {
     actionIcon.className = "fas fa-stop";
     actionBtn.classList.replace("bg-green-600", "bg-red-600");
 
-    const botDiv = appendBubble('bot', `<div class="flex gap-1 py-2"><div class="w-2 h-2 bg-green-500 rounded-full animate-bounce"></div><div class="w-2 h-2 bg-green-500 rounded-full animate-bounce" style="animation-delay:0.2s"></div><div class="w-2 h-2 bg-green-500 rounded-full animate-bounce" style="animation-delay:0.4s"></div></div><div class="bot-text"></div>`);
+    const botDiv = appendBubble('bot', `<div class="dot-bounce"><span></span><span></span><span></span></div><div class="bot-text"></div>`);
     const botTextDiv = botDiv.querySelector('.bot-text');
+    const dots = botDiv.querySelector('.dot-bounce');
 
     try {
         const response = await fetch('/api/chat', {
@@ -82,15 +81,16 @@ async function sendMessage() {
 
         const reader = response.body.getReader();
         let fullReply = "";
-        botDiv.querySelector('.flex').remove(); // ڈاٹس ہٹائیں
-
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+            if (dots) dots.remove();
             fullReply += new TextDecoder().decode(value);
             botTextDiv.innerHTML = marked.parse(fullReply);
             scrollToBottom();
-            hljs.highlightAll();
+            
+            // کوڈ بلاک میں کاپی بٹن لگانا
+            formatCodeBlocks(botTextDiv);
         }
         loadHistory();
     } catch (e) {
@@ -99,6 +99,32 @@ async function sendMessage() {
         resetBtn();
     }
 }
+
+function formatCodeBlocks(container) {
+    container.querySelectorAll('pre').forEach(block => {
+        if (block.parentElement.classList.contains('code-wrapper')) return;
+        
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-wrapper';
+        const lang = block.querySelector('code').className.split('-')[1] || 'code';
+        
+        const header = document.createElement('div');
+        header.className = 'code-header';
+        header.innerHTML = `<span>${lang.toUpperCase()}</span><span class="cursor-pointer" onclick="copyCode(this)"><i class="far fa-copy"></i> Copy</span>`;
+        
+        block.parentNode.insertBefore(wrapper, block);
+        wrapper.appendChild(header);
+        wrapper.appendChild(block);
+        hljs.highlightAll();
+    });
+}
+
+window.copyCode = (btn) => {
+    const code = btn.parentElement.nextElementSibling.innerText;
+    navigator.clipboard.writeText(code);
+    btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+    setTimeout(() => btn.innerHTML = '<i class="far fa-copy"></i> Copy', 2000);
+};
 
 function resetBtn() {
     abortController = null;
