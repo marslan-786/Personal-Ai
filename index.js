@@ -2,58 +2,53 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const axios = require('axios');
-const multer = require('multer');
-const fs = require('fs');
+const cors = require('cors');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-const upload = multer({ dest: 'uploads/' });
 
+app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-mongoose.connect(process.env.MONGO_URI).then(() => console.log('🍃 Memory DB Active'));
+mongoose.connect(process.env.MONGO_URI).then(() => console.log('🍃 DB Connected'));
 
 const chatSchema = new mongoose.Schema({
     sessionId: String,
+    title: { type: String, default: 'New Chat' },
     messages: [{ role: String, content: String }]
 });
 const Chat = mongoose.model('Chat', chatSchema);
 
-app.post('/api/chat', upload.single('file'), async (req, res) => {
+app.post('/api/chat', async (req, res) => {
     const { message, sessionId, mode } = req.body;
-    const file = req.file;
-
     try {
-        let userChat = await Chat.findOne({ sessionId }) || new Chat({ sessionId, messages: [] });
+        let userChat = await Chat.findOne({ sessionId });
+        if (!userChat) {
+            const title = message.substring(0, 30);
+            userChat = new Chat({ sessionId, title, messages: [] });
+        }
 
-        // شخصیت کا جادو (Personality Logic)
-        let systemMsg = "";
+        // شخصیت (Personality) کا جادو
+        let systemContent = "";
         if (mode === 'pro') {
-            systemMsg = "Tumhara naam 'Pro Coder' hai. Tum aik senior developer ho lekin bohot funny aur friendly ho. Har baat mazaq aur emojis ke saath samjhao. Coding se pehle deep analysis (Thinking) karo. Urdu bilkul natural aur cute honi chahiye! 😉🚀";
+            systemContent = "تمہارا نام 'Pro Coder' ہے۔ تم ایک نہایت ہی فنی اور ذہین پاکستانی ڈویلپر ہو جو اردو میں بات کرتا ہے۔ تمہارا کام مشکل کوڈ کو آسان اور مزاحیہ انداز میں سمجھانا ہے۔ کوڈنگ سے پہلے 'Thinking Process' لازمی لکھو۔ ہمیشہ ایموجیز (💻, 🚀, 😂) استعمال کرو۔ اردو املا بالکل درست ہونی چاہیے (مثلاً ارسلان، جڑے، پیارے)۔";
         } else {
-            systemMsg = "Tumhara naam 'Chulbul AI' hai. Tum aik bohot cute aur mazahiya dost ho. Coding ki baatein mat karo, bas doston ki tarah gap-shap lagao, jokes sunao aur emojis bhar bhar ke use karo. Agar koi code mange to kaho 'Oye hero, Pro Coder mode mein jaao!'. 😂✨";
+            systemContent = "تمہارا نام 'Friendly Yaar' ہے۔ تم یوزر کے جگری دوست ہو۔ ہر جواب میں کوئی نہ کوئی لطیفہ، مزاح یا میٹھی بات کرو۔ لوگوں کو ہنسانا تمہارا مقصد ہے۔ اگر کوئی کوڈنگ کا پوچھے تو کہو 'اوئے جانی، اس کے لیے پرو کوڈر موڈ میں جاؤ نا!'۔ بہت سارے ایموجیز (😇, ✨, 🥳, 🔥) استعمال کرو۔";
         }
 
-        let modelName = file ? "llava:8b" : "llama3.1:8b";
-        let payload = {
-            model: modelName,
-            messages: [{ role: 'system', content: systemMsg }, ...userChat.messages, { role: 'user', content: message }],
+        const history = [{ role: 'system', content: systemContent }, ...userChat.messages, { role: 'user', content: message }];
+
+        const aiResponse = await axios.post(`${process.env.OLLAMA_URL}/api/chat`, {
+            model: "llama3.1:8b",
+            messages: history.map(m => ({ role: m.role, content: m.content })),
             stream: true
-        };
-
-        // اگر تصویر ہے تو اسے Base64 میں بدلیں
-        if (file) {
-            const imgBase64 = fs.readFileSync(file.path, { encoding: 'base64' });
-            payload.messages[payload.messages.length - 1].images = [imgBase64];
-            fs.unlinkSync(file.path); // عارضی فائل ڈیلیٹ کریں
-        }
-
-        const aiResponse = await axios.post(`${process.env.OLLAMA_URL}/api/chat`, payload, { responseType: 'stream' });
+        }, { responseType: 'stream' });
 
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         let fullReply = "";
-
+        
         aiResponse.data.on('data', chunk => {
             const lines = chunk.toString().split('\n');
             for (const line of lines) {
@@ -71,8 +66,13 @@ app.post('/api/chat', upload.single('file'), async (req, res) => {
             await userChat.save();
             res.end();
         });
-
-    } catch (e) { res.status(500).end("Server error, yaar!"); }
+    } catch (e) { res.status(500).end("سرور تھک گیا ہے یار! 😫"); }
 });
 
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Pro Coder Engine on ${PORT}`));
+// ہسٹری کے روٹس
+app.get('/api/history', async (req, res) => {
+    const history = await Chat.find({}, 'sessionId title').sort({ _id: -1 });
+    res.json(history);
+});
+
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 AI is live on ${PORT}`));
