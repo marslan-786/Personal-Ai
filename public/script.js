@@ -3,7 +3,6 @@ const userInput = document.getElementById('user-input');
 const actionBtn = document.getElementById('action-btn');
 const actionIcon = document.getElementById('action-icon');
 const previewBox = document.getElementById('preview-box');
-const sidebar = document.getElementById('sidebar');
 const historyList = document.getElementById('history-list');
 
 let abortController = null;
@@ -12,9 +11,9 @@ let sessionId = "S-" + Math.floor(Math.random() * 100000);
 
 window.onload = loadHistory;
 
-function toggleSidebar() { sidebar.classList.toggle('active'); }
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('active'); }
 
-function handleFileSelect(event) {
+function handleFile(event) {
     const file = event.target.files[0];
     if (file) {
         const reader = new FileReader();
@@ -38,18 +37,13 @@ function scrollToBottom() {
 
 chatContainer.addEventListener('scroll', () => {
     const btn = document.getElementById('scroll-btn');
-    if (chatContainer.scrollHeight - chatContainer.scrollTop > 800) btn.style.display = 'flex';
-    else btn.style.display = 'none';
+    btn.style.display = (chatContainer.scrollHeight - chatContainer.scrollTop > 800) ? 'flex' : 'none';
 });
 
 async function loadHistory() {
     const res = await fetch('/api/history');
     const data = await res.json();
-    historyList.innerHTML = data.map(chat => `
-        <div class="p-3 bg-gray-800 rounded-lg border border-gray-700 truncate mb-2">
-            ${chat.messages[0]?.content.substring(0, 30) || "Chat Session"}
-        </div>
-    `).join('');
+    historyList.innerHTML = data.map(chat => `<div class="p-2 bg-gray-800 rounded mb-1 truncate">${chat.messages[0]?.content || "Chat Session"}</div>`).join('');
 }
 
 async function handleAction() {
@@ -61,9 +55,9 @@ async function sendMessage() {
     const text = userInput.value.trim();
     if (!text && !selectedImageBase64) return;
 
-    // یوزر ببل میں پکچر دکھانا
+    // یوزر ببل میں امیج اور ٹیکسٹ دکھانا
     let userHTML = selectedImageBase64 ? `<img src="data:image/png;base64,${selectedImageBase64}" class="chat-img">` : "";
-    userHTML += `<div>${text || "Analyze this image"}</div>`;
+    userHTML += `<div>${text || "Analyze Image"}</div>`;
     appendBubble('user', userHTML);
 
     const imgData = selectedImageBase64;
