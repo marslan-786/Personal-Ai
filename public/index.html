@@ -10,65 +10,47 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
     <style>
-        body { background: #0d1117; color: #e6edf3; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; margin: 0; }
-        
+        body { background: #0d1117; color: #e6edf3; height: 100vh; display: flex; flex-direction: column; margin: 0; overflow: hidden; }
         header { flex-shrink: 0; background: #161b22; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; padding: 10px 15px; z-index: 100; }
+        #chat-window { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; background: #0d1117; }
+        footer { flex-shrink: 0; background: #0d1117; border-top: 1px solid #30363d; padding: 10px; width: 100%; z-index: 100; }
         
-        #chat-window { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
-        
-        /* ان پٹ فیلڈ فکس - اب کبھی غائب نہیں ہوگی */
-        footer { flex-shrink: 0; background: #0d1117; border-top: 1px solid #30363d; padding: 10px; z-index: 100; width: 100%; }
-
         #sidebar { position: fixed; inset-y: 0; left: -280px; width: 280px; background: #090c10; transition: 0.3s; z-index: 1000; border-right: 1px solid #30363d; padding: 20px; }
         #sidebar.active { left: 0; }
-
-        .msg-bubble { max-width: 88%; padding: 12px; border-radius: 18px; line-height: 1.6; }
+        .msg-bubble { max-width: 85%; padding: 12px; border-radius: 18px; }
         .user-msg { align-self: flex-end; background: #238636; border-bottom-right-radius: 2px; }
         .bot-msg { align-self: flex-start; background: #21262d; border: 1px solid #30363d; border-bottom-left-radius: 2px; }
-        
-        .chat-img { width: 100%; max-width: 250px; border-radius: 10px; margin-bottom: 8px; border: 1px solid #444; }
-        #scroll-down-btn { position: fixed; bottom: 100px; right: 20px; background: #238636; width: 40px; height: 40px; border-radius: 50%; display: none; align-items: center; justify-content: center; z-index: 60; color: white; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <aside id="sidebar">
         <div class="flex justify-between items-center mb-6">
-            <h2 class="text-green-500 font-bold">Chats</h2>
-            <i onclick="toggleSidebar()" class="fas fa-times cursor-pointer text-gray-500"></i>
+            <h2 class="text-green-500 font-bold">Recent Chats</h2>
+            <i onclick="toggleSidebar()" class="fas fa-times cursor-pointer"></i>
         </div>
-        <button onclick="newSession()" class="w-full mb-4 p-2 bg-gray-800 rounded text-xs border border-gray-700 hover:bg-gray-700 transition"> + New Chat</button>
-        <div id="history-list" class="space-y-2 text-sm overflow-y-auto h-[70%]"></div>
+        <div id="history-list" class="space-y-2 text-xs"></div>
     </aside>
 
     <header>
         <div class="flex items-center gap-3">
             <i onclick="toggleSidebar()" class="fas fa-bars text-xl cursor-pointer text-gray-400"></i>
-            <span class="font-bold text-green-500 text-sm md:text-lg">PRO CODER AI</span>
+            <span class="font-bold text-green-500">PRO CODER AI</span>
         </div>
         <select id="mode-selector" class="bg-gray-800 text-xs border border-gray-700 rounded p-1 text-white">
             <option value="chat">😊 Chat Mode</option>
-            <option value="pro">💻 Pro Coder</option>
+            <option value="pro">💻 Thinking Mode</option>
         </select>
     </header>
 
     <main id="chat-window"></main>
 
-    <div id="scroll-down-btn" onclick="scrollToBottom()"><i class="fas fa-arrow-down"></i></div>
-
     <footer>
-        <div class="max-w-4xl mx-auto">
-            <div id="preview-box" class="hidden mb-2 relative inline-block">
-                <img id="image-preview" src="" class="w-16 h-16 object-cover rounded border-2 border-green-500 shadow-lg">
-                <span class="absolute -top-2 -right-2 bg-red-600 rounded-full w-5 h-5 flex items-center justify-center text-white text-[10px] cursor-pointer" onclick="clearPreview()">×</span>
-            </div>
-            
-            <div class="flex items-end gap-2 bg-gray-800 rounded-2xl p-2 border border-gray-700 shadow-xl">
-                <input type="file" id="file-input" class="hidden" accept="image/*" onchange="handleFile(event)">
-                <button onclick="document.getElementById('file-input').click()" class="p-3 text-gray-400 hover:text-green-500"><i class="fas fa-plus"></i></button>
-                <textarea id="user-input" placeholder="Type a message..." rows="1" class="flex-1 bg-transparent border-none outline-none p-2 text-white resize-none text-sm" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
-                <button id="action-btn" onclick="handleAction()" class="bg-green-600 p-3 rounded-xl text-white transition"><i id="action-icon" class="fas fa-paper-plane"></i></button>
-            </div>
+        <div class="max-w-4xl mx-auto flex items-end gap-2 bg-gray-800 rounded-2xl p-2 border border-gray-700">
+            <button onclick="document.getElementById('file-input').click()" class="p-2 text-gray-400"><i class="fas fa-plus"></i></button>
+            <input type="file" id="file-input" class="hidden" accept="image/*" onchange="handleFile(event)">
+            <textarea id="user-input" placeholder="Type a message..." rows="1" class="flex-1 bg-transparent border-none outline-none p-2 text-white resize-none text-sm" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+            <button onclick="sendMessage()" class="bg-green-600 p-3 rounded-xl text-white"><i class="fas fa-paper-plane"></i></button>
         </div>
     </footer>
 
