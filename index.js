@@ -8,53 +8,61 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// MongoDB Connection
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('🍃 Memory Database: Connected & Active'))
-  .catch(err => console.error('❌ Database Connection Error:', err));
+  .then(() => console.log('🍃 DB Connected'))
+  .catch(err => console.error('❌ DB Error:', err));
 
-// Chat Schema
+// اسکیما میں ٹائٹل (Title) کا اضافہ
 const chatSchema = new mongoose.Schema({
     sessionId: { type: String, required: true, unique: true },
-    messages: [
-        {
-            role: String,
-            content: String,
-            timestamp: { type: Date, default: Date.now }
-        }
-    ]
+    title: { type: String, default: 'New Chat' },
+    messages: [{ role: String, content: String, timestamp: { type: Date, default: Date.now } }]
 });
 const Chat = mongoose.model('Chat', chatSchema);
 
-// --- AI CHAT LOGIC (STREAMING & PERSONALITY) ---
+// 1. تمام چیٹس کی لسٹ حاصل کرنا (سائیڈ بار کے لیے)
+app.get('/api/history', async (req, res) => {
+    try {
+        const history = await Chat.find({}, 'sessionId title').sort({ _id: -1 });
+        res.json(history);
+    } catch (e) { res.status(500).send(e.message); }
+});
+
+// 2. مخصوص چیٹ لوڈ کرنا
+app.get('/api/chat/:sessionId', async (req, res) => {
+    try {
+        const chat = await Chat.findOne({ sessionId: req.params.sessionId });
+        res.json(chat);
+    } catch (e) { res.status(500).send(e.message); }
+});
+
+// 3. مین چیٹ اینڈ پوائنٹ (اسٹریمنگ کے ساتھ)
 app.post('/api/chat', async (req, res) => {
     const { message, sessionId } = req.body;
-
     try {
         let userChat = await Chat.findOne({ sessionId });
-        if (!userChat) userChat = new Chat({ sessionId, messages: [] });
+        if (!userChat) {
+            // پہلی بار چیٹ کا ٹائٹل پہلے میسج سے بنانا
+            const title = message.substring(0, 30) + (message.length > 30 ? '...' : '');
+            userChat = new Chat({ sessionId, title, messages: [] });
+        }
 
         userChat.messages.push({ role: 'user', content: message });
 
-        // اے آئی کی شخصیت اور اردو املا کی درستی
         const systemPrompt = {
             role: 'system',
-            content: "تمہارا نام 'Pro Coder' ہے۔ تم ایک نہایت ذہین اردو ڈویلپر ہو۔ ہمیشہ درست اردو املا استعمال کرو (مثلاً ارسلان 'س' سے لکھو 'ص' سے نہیں، اور 'جڑے' استعمال کرو 'جوڑے' نہیں)۔ جواب نہایت پیشہ ورانہ ہونا چاہیے۔"
+            content: "تمہارا نام 'Pro Coder' ہے۔ تم ایک نہایت ذہین اردو ڈویلپر ہو۔ ہمیشہ درست اردو املا استعمال کرو۔"
         };
 
         const historyForAI = [systemPrompt, ...userChat.messages.map(msg => ({
             role: msg.role, content: msg.content
         }))];
 
-        // اسٹریمنگ رسپانس کے لیے ہیڈرز
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Transfer-Encoding', 'chunked');
-
         const aiResponse = await axios.post(`${process.env.OLLAMA_URL}/api/chat`, {
             model: "llama3.1:8b",
             messages: historyForAI,
@@ -63,7 +71,6 @@ app.post('/api/chat', async (req, res) => {
         }, { responseType: 'stream' });
 
         let fullReply = "";
-
         aiResponse.data.on('data', (chunk) => {
             const lines = chunk.toString().split('\n');
             for (const line of lines) {
@@ -73,7 +80,7 @@ app.post('/api/chat', async (req, res) => {
                     if (json.message && json.message.content) {
                         const content = json.message.content;
                         fullReply += content;
-                        res.write(content); // فرنٹ اینڈ کو ایک ایک لفظ بھیجنا
+                        res.write(content);
                     }
                 } catch (e) { }
             }
@@ -84,17 +91,7 @@ app.post('/api/chat', async (req, res) => {
             await userChat.save();
             res.end();
         });
-
-    } catch (error) {
-        console.error('❌ AI Error:', error.message);
-        res.status(500).end("سرور میں مسئلہ ہے۔");
-    }
+    } catch (error) { res.status(500).end("Error"); }
 });
 
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Pro Coder Engine Started on Port ${PORT}`);
-});
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server on ${PORT}`));
