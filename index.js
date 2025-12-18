@@ -9,7 +9,13 @@ const PORT = process.env.PORT || 8080;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
-mongoose.connect(process.env.MONGO_URI).then(() => console.log('🍃 Database Connected'));
+// MongoDB Connection
+mongoose.connect(process.env.MONGO_URI).then(async () => {
+    console.log('🍃 DB Connected');
+    // صرف اپنی چیٹ کلیکشن کو ایک بار کلین کرنا
+    await mongoose.connection.collection('chats').deleteMany({});
+    console.log('🧹 Collection Cleaned for a fresh start');
+}).catch(err => console.error('DB Error:', err));
 
 const chatSchema = new mongoose.Schema({
     sessionId: String,
@@ -17,36 +23,32 @@ const chatSchema = new mongoose.Schema({
 });
 const Chat = mongoose.model('Chat', chatSchema);
 
-// --- 100% کسٹم اردو ماسٹر پیرامیٹر ---
-const MASTER_PROMPT = `
-آپ کا نام 'Pro Coder' ہے۔ آپ ایک خالص پاکستانی AI ہیں جو اردو زبان میں بات چیت کرنے کا ماہر ہے۔
-آپ کی اردو بالکل ویسی ہونی چاہیے جیسی ہم ایک دوسرے سے واٹس ایپ پر یا آمنے سامنے کرتے ہیں۔
-خاص ہدایات:
-1. 'ارسلان' لکھتے وقت 'س' استعمال کریں (ص نہیں)۔
-2. 'جڑے رہیں' یا 'جڑے' استعمال کریں، 'جوڑے' ہرگز نہیں۔
-3. آپ کا انداز نہایت دوستانہ، مزاحیہ اور پیارا ہونا چاہیے (Cute & Funny)۔
-4. گفتگو میں ایموجیز کا بھرپور استعمال کریں تاکہ یوزر کو مزہ آئے۔
-5. 'Chat Mode' میں آپ ایک مزاحیہ دوست ہیں، اگر کوئی کوڈ مانگے تو اسے کہیں 'اوئے ہوئے! کوڈنگ کے لیے اوپر سے پرو موڈ آن کرو نا یار!'
-6. 'Pro Coder Mode' میں آپ ایک استاد ڈویلپر ہیں، پہلے تھوڑی سوچ بچار (Thinking Process) بتائیں پھر زبردست کوڈ دیں۔
-7. ہمیشہ خالص اور آسان اردو استعمال کریں، مشکل عربی یا فارسی الفاظ سے پرہیز کریں۔
+// --- سسٹم پرامپٹ (زبان کی تبدیلی کے ساتھ) ---
+const SYSTEM_INSTRUCTIONS = `
+Your name is 'Pro Coder'. You are a genius AI friend.
+CRITICAL RULES:
+1. ALWAYS respond in the SAME language the user uses. If they speak Urdu, use Urdu. If they speak English, use English.
+2. If in 'Chat Mode', be funny, use emojis, and be a cool friend. 
+3. If in 'Pro Coder Mode', analyze the code deeply before providing it.
+4. For Urdu: Use correct spellings like 'ارسلان' (with س) and 'جڑے'. 
+5. Keep answers concise and fast.
 `;
 
 app.post('/api/chat', async (req, res) => {
     const { message, sessionId, mode, image } = req.body;
     try {
-        let userChat = await Chat.findOne({ sessionId });
-        if (!userChat) userChat = new Chat({ sessionId, messages: [] });
+        let userChat = await Chat.findOne({ sessionId }) || new Chat({ sessionId, messages: [] });
 
         const modelName = image ? "llava" : "llama3.1";
-        const history = [{ role: 'system', content: MASTER_PROMPT }, ...userChat.messages.slice(-10)];
+        const history = [{ role: 'system', content: SYSTEM_INSTRUCTIONS }, ...userChat.messages.slice(-8)];
         
-        const payload = {
+        // اسٹریمنگ رسپانس
+        const aiResponse = await axios.post(`${process.env.OLLAMA_URL}/api/chat`, {
             model: modelName,
             messages: [...history, { role: 'user', content: message, images: image ? [image] : [] }],
-            stream: true
-        };
-
-        const aiResponse = await axios.post(`${process.env.OLLAMA_URL}/api/chat`, payload, { responseType: 'stream' });
+            stream: true,
+            keep_alive: -1 // اے آئی کو ریم میں ہمیشہ ایکٹو رکھنے کے لیے
+        }, { responseType: 'stream', timeout: 0 }); // ٹائم آؤٹ ختم کر دیا تاکہ جواب لازمی آئے
 
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         let fullReply = "";
@@ -70,8 +72,15 @@ app.post('/api/chat', async (req, res) => {
             res.end();
         });
     } catch (e) {
-        res.status(500).end("یار میرا دماغ گھوم گیا ہے، ذرا دوبارہ میسج کرو! 😅");
+        console.error("Error:", e.message);
+        res.status(500).end("یار لگتا ہے سرور سو گیا ہے یا کنکشن ٹوٹ گیا ہے۔ دوبارہ کوشش کرو! 😅");
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Pro Coder Active on ${PORT}`));
+// ہسٹری اے پی آئی واپس لگا دی
+app.get('/api/history', async (req, res) => {
+    const chats = await Chat.find().sort({ _id: -1 });
+    res.json(chats);
+});
+
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Pro Coder Engine Live on ${PORT}`));
