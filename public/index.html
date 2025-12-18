@@ -10,46 +10,38 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
     <style>
-        body { background-color: #0d1117; color: #e6edf3; overflow: hidden; }
-        #sidebar { transition: transform 0.3s ease; width: 260px; z-index: 1000; }
-        .sidebar-closed { transform: translateX(-100%); }
-        .chat-container { height: calc(100vh - 140px); overflow-y: auto; }
-        pre { position: relative; background: #161b22; padding: 12px; border-radius: 8px; border: 1px solid #30363d; margin: 10px 0; }
-        .copy-btn { position: absolute; top: 5px; right: 5px; background: #21262d; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
-        .dot-loading { display: flex; gap: 4px; padding: 10px; }
-        .dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: bounce 1.4s infinite; }
-        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
-        footer { position: fixed; bottom: 0; right: 0; width: 100%; background: #0d1117; padding: 15px; }
-        @media (min-width: 768px) { footer { width: calc(100% - 260px); } }
+        body { background: #0d1117; color: #e6edf3; overflow: hidden; }
+        .chat-container { height: calc(100vh - 180px); overflow-y: auto; scroll-behavior: smooth; }
+        #user-input { min-height: 50px; max-height: 200px; resize: none; transition: height 0.2s; }
+        .dot-loading { display: flex; gap: 4px; padding: 10px; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+        footer { position: fixed; bottom: 0; width: 100%; background: #0d1117; z-index: 100; border-top: 1px solid #30363d; }
     </style>
 </head>
-<body class="flex">
+<body class="flex flex-col h-screen">
 
-    <aside id="sidebar" class="fixed inset-y-0 left-0 bg-gray-900 border-r border-gray-800 flex flex-col p-4 sidebar-closed md:transform-none">
-        <button onclick="newChat()" class="w-full border border-gray-700 p-3 rounded-lg mb-6 hover:bg-gray-800 text-sm">
-            <i class="fas fa-plus"></i> New Chat
-        </button>
-        <div id="history-list" class="flex-1 overflow-y-auto space-y-2 text-sm text-gray-400">
-            </div>
-    </aside>
+    <header class="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900">
+        <div class="flex items-center gap-4">
+            <button onclick="toggleSidebar()" class="text-xl"><i class="fas fa-bars"></i></button>
+            <h1 class="text-lg font-bold text-green-500">MY AI</h1>
+        </div>
+        
+        <select id="mode-selector" class="bg-gray-800 text-xs border border-gray-700 rounded-lg p-2 outline-none focus:border-green-500">
+            <option value="chat">😊 Chat Mode</option>
+            <option value="pro">💻 Pro Coder Mode</option>
+        </select>
+    </header>
 
-    <div class="flex-1 flex flex-col md:ml-[260px]">
-        <header class="p-4 border-b border-gray-800 flex items-center bg-gray-900 sticky top-0">
-            <button onclick="toggleSidebar()" class="md:hidden mr-4 text-xl"><i class="fas fa-bars"></i></button>
-            <h1 class="text-lg font-bold text-green-500">PRO CODER AI</h1>
-        </header>
+    <main id="chat-box" class="flex-1 p-4 chat-container space-y-6"></main>
 
-        <main id="chat-box" class="flex-1 p-4 chat-container"></main>
-
-        <footer class="border-t border-gray-800">
-            <div class="max-w-4xl mx-auto flex gap-2">
-                <input type="text" id="user-input" placeholder="مجھ سے بات کریں..." class="flex-1 bg-gray-800 rounded-xl px-4 py-3 outline-none focus:border-green-500 border border-transparent">
-                <button onclick="sendMessage()" class="bg-green-600 px-6 py-3 rounded-xl hover:bg-green-500 transition"><i class="fas fa-paper-plane"></i></button>
-            </div>
-        </footer>
-    </div>
-
-    <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 hidden z-[900]"></div>
+    <footer class="p-4">
+        <div class="max-w-4xl mx-auto flex items-end gap-2 bg-gray-800 rounded-2xl p-2 border border-gray-700">
+            <button class="p-3 text-gray-400 hover:text-green-500"><i class="fas fa-plus"></i></button>
+            <textarea id="user-input" placeholder="یہاں لکھیں... (Shift+Enter نئی لائن کے لیے)" 
+                      class="flex-1 bg-transparent border-none outline-none p-2 text-sm text-white"></textarea>
+            <button onclick="sendMessage()" class="bg-green-600 p-3 rounded-xl hover:bg-green-500"><i class="fas fa-paper-plane"></i></button>
+        </div>
+    </footer>
 
     <script src="script.js"></script>
 </body>
