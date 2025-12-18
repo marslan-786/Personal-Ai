@@ -3,28 +3,43 @@ const userInput = document.getElementById('user-input');
 const actionBtn = document.getElementById('action-btn');
 const actionIcon = document.getElementById('action-icon');
 const sidebar = document.getElementById('sidebar');
+const scrollBtn = document.getElementById('scroll-btn');
+const imagePreviewContainer = document.getElementById('image-preview-container');
 const imagePreview = document.getElementById('image-preview');
+
 let abortController = null;
 let selectedImageBase64 = null;
+let sessionId = "session-" + Math.random().toString(36).substr(2, 9);
 
-// سائیڈ بار ٹوگل فنکشن
-function toggleSidebar() {
-    sidebar.classList.toggle('active');
-}
+function toggleSidebar() { sidebar.classList.toggle('active'); }
 
-// امیج پری ویو اور بیس 64 میں کنورٹ کرنا
 function previewImage(event) {
     const file = event.target.files[0];
     if (file) {
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = (e) => {
             imagePreview.src = e.target.result;
-            imagePreview.style.display = 'block';
+            imagePreviewContainer.style.display = 'block';
             selectedImageBase64 = e.target.result.split(',')[1];
         }
         reader.readAsDataURL(file);
     }
 }
+
+function clearPreview() {
+    selectedImageBase64 = null;
+    imagePreviewContainer.style.display = 'none';
+}
+
+function scrollToBottom() {
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+// سکرول بٹن دکھانے کا لاجک
+chatBox.addEventListener('scroll', () => {
+    if (chatBox.scrollHeight - chatBox.scrollTop > 800) scrollBtn.style.display = 'block';
+    else scrollBtn.style.display = 'none';
+});
 
 userInput.addEventListener('input', function() {
     this.style.height = 'auto';
@@ -32,10 +47,7 @@ userInput.addEventListener('input', function() {
 });
 
 async function handleAction() {
-    if (abortController) {
-        abortController.abort();
-        return;
-    }
+    if (abortController) { abortController.abort(); return; }
     sendMessage();
 }
 
@@ -43,10 +55,16 @@ async function sendMessage() {
     const text = userInput.value.trim();
     if (!text && !selectedImageBase64) return;
 
-    appendMessage('user', text);
+    // یوزر کا میسج دکھانا (بشمول امیج)
+    let userMsgHTML = "";
+    if (selectedImageBase64) userMsgHTML += `<img src="data:image/png;base64,${selectedImageBase64}" class="msg-img">`;
+    userMsgHTML += `<div>${text || "Analyzed Image"}</div>`;
+    appendMessage('user', userMsgHTML);
+
+    const currentImage = selectedImageBase64;
     userInput.value = '';
     userInput.style.height = 'auto';
-    imagePreview.style.display = 'none';
+    clearPreview();
 
     abortController = new AbortController();
     actionIcon.className = "fas fa-stop";
@@ -61,15 +79,12 @@ async function sendMessage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                message: text || "Analyze this image", 
-                sessionId: "user-1", 
+                message: text, sessionId, 
                 mode: document.getElementById('mode-selector').value,
-                image: selectedImageBase64 
+                image: currentImage 
             }),
             signal: abortController.signal
         });
-
-        selectedImageBase64 = null; // میسج بھیجنے کے بعد امیج صاف کریں
 
         const reader = response.body.getReader();
         let botText = "";
@@ -80,13 +95,12 @@ async function sendMessage() {
 
             botText += new TextDecoder().decode(value);
             botTextDiv.innerHTML = marked.parse(botText);
-            
-            // سمارٹ سکرولنگ: میسج کو ان پٹ سے تھوڑا اوپر لانا
-            chatBox.scrollTop = chatBox.scrollHeight;
+            scrollToBottom();
+            hljs.highlightAll();
         }
     } catch (e) {
         if (e.name === 'AbortError') botTextDiv.innerHTML += " [Stopped]";
-        else botTextDiv.innerHTML = "Server Error! (Check logs)";
+        else botTextDiv.innerHTML = "Server connection lost! 😫";
     } finally {
         resetActionBtn();
     }
@@ -98,15 +112,11 @@ function resetActionBtn() {
     actionBtn.classList.replace("bg-red-600", "bg-green-600");
 }
 
-function appendMessage(role, text) {
+function appendMessage(role, html) {
     const div = document.createElement('div');
     div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
-    div.innerHTML = `<div class="max-w-[85%] p-4 rounded-2xl ${role === 'user' ? 'bg-green-700' : 'bg-gray-800 border border-gray-700'}">${text}</div>`;
+    div.innerHTML = `<div class="max-w-[85%] p-4 rounded-2xl ${role === 'user' ? 'bg-green-700' : 'bg-gray-800 border border-gray-700'}">${html}</div>`;
     chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight;
+    scrollToBottom();
     return div;
-}
-
-function applyCodeFixes(container) {
-    container.querySelectorAll('pre').forEach(block => hljs.highlightAll());
 }
