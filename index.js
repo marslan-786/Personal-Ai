@@ -9,12 +9,7 @@ const PORT = process.env.PORT || 8080;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
-mongoose.connect(process.env.MONGO_URI).then(async () => {
-    console.log('🍃 DB Connected');
-    // کلیکشن کلین کرنے کی ضرورت نہیں اگر آپ پرانی چیٹ رکھنا چاہتے ہیں، 
-    // لیکن اگر بالکل فریش کرنا ہے تو نیچے والی لائن ان کمنٹ کر دیں:
-    // await mongoose.connection.collection('chats').deleteMany({});
-}).catch(err => console.error(err));
+mongoose.connect(process.env.MONGO_URI).then(() => console.log('🍃 DB Connected'));
 
 const chatSchema = new mongoose.Schema({
     sessionId: String,
@@ -22,36 +17,34 @@ const chatSchema = new mongoose.Schema({
 });
 const Chat = mongoose.model('Chat', chatSchema);
 
-// --- فائنل ماسٹر پیرامیٹر (Thinking vs Output) ---
-const SUPER_PROMPT = `
-You are 'Pro Coder', a highly advanced AI. 
-DEFAULT LANGUAGE: English. 
-LANGUAGE SWITCHING: Always detect the user's language. If they speak Urdu, reply in pure Urdu. If English, reply in English. NEVER mix languages unless requested.
-
-CORE RULES:
-1. INTERNAL THINKING: Analyze images and logic internally. Do NOT show phrases like "I was wrong" or "My observation is" unless asked. 
-2. NO HALLUCINATION: Only talk about what is actually in the image. If you see a phone, talk about the phone. Do NOT mention internet speed unless the image is a Speedtest.
-3. PERSONALITY: Be a loyal, professional, and slightly witty friend.
-4. URDU QUALITY: Use natural Urdu (Arsalan with 'س'). 
-
-RESPONSE FORMAT: Give ONLY the final answer. Keep your reasoning hidden.
+// --- فائنل ماسٹر پیرامیٹر: تھنکنگ اور ٹرانسلیشن ---
+const MASTER_SYSTEM_PROMPT = `
+You are 'Pro Coder', a highly advanced AI system.
+STEP 1: ANALYZE input/images in English for 100% accuracy. Look at numbers (like speed test results) very carefully.
+STEP 2: TRANSLATE the final result into perfect, natural Pakistani Urdu.
+RULES:
+- Use "Kya haal hai?" not weird Arabic translations.
+- For Urdu spellings: 'Arsalan' uses 'س'.
+- Be funny, witty, and loyal like a best friend.
+- If user speaks English, keep it in English.
+- OUTPUT ONLY THE FINAL URDU/ENGLISH RESPONSE. NO OBSERVATION TEXT.
 `;
 
 app.post('/api/chat', async (req, res) => {
     const { message, sessionId, mode, image } = req.body;
     try {
         let userChat = await Chat.findOne({ sessionId }) || new Chat({ sessionId, messages: [] });
-        
-        // اگر تصویر ہے تو Llava، ورنہ Llama 3.1
         const modelName = image ? "llava" : "llama3.1";
-        const history = [{ role: 'system', content: SUPER_PROMPT }, ...userChat.messages.slice(-6)];
+        
+        const history = [{ role: 'system', content: MASTER_SYSTEM_PROMPT }, ...userChat.messages.slice(-6)];
 
+        // اسٹریمنگ کنکشن
         const aiResponse = await axios.post(`${process.env.OLLAMA_URL}/api/chat`, {
             model: modelName,
             messages: [...history, { role: 'user', content: message, images: image ? [image] : [] }],
             stream: true,
-            keep_alive: -1,
-            options: { temperature: 0.5, num_ctx: 32768 } // ٹمپریچر کم کیا تاکہ یہ سنجیدہ رہے
+            keep_alive: -1, // ریم میں ہمیشہ ایکٹو
+            options: { num_ctx: 32768, temperature: 0.4 } // کم ٹمپریچر سے گرامر بہتر ہوتی ہے
         }, { responseType: 'stream' });
 
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -74,12 +67,14 @@ app.post('/api/chat', async (req, res) => {
             await userChat.save();
             res.end();
         });
-    } catch (e) { res.status(500).end("Server Busy! Try again."); }
+    } catch (e) {
+        res.status(500).end("یار لگتا ہے انجن گرم ہو گیا ہے، دوبارہ میسج کرو! 😅");
+    }
 });
 
 app.get('/api/history', async (req, res) => {
-    const chats = await Chat.find().sort({ _id: -1 }).limit(20);
+    const chats = await Chat.find().sort({ _id: -1 }).limit(10);
     res.json(chats);
 });
 
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Pro Coder Active` ) );
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Pro Coder Engine Ready`));
