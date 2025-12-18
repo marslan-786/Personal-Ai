@@ -5,8 +5,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-# Correct tags: llama3.1 and llava
-RUN echo '#!/bin/bash\nollama serve & sleep 10 && ollama pull llama3.1 && ollama pull llava && npm start' > start.sh
+# Ensuring models are pulled correctly
+RUN echo '#!/bin/bash\nollama serve & sleep 15 && ollama pull llama3.1 && ollama pull llava && npm start' > start.sh
 RUN chmod +x start.sh
 EXPOSE 8080
 CMD ["./start.sh"]
