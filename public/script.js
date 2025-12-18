@@ -125,3 +125,7 @@ function appendBubble(role, html) {
     chatWindow.scrollTop = chatWindow.scrollHeight;
     return div;
 }
+// Register Service Worker for PWA
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+}
