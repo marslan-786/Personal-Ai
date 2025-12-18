@@ -9,65 +9,49 @@ const PORT = process.env.PORT || 8080;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
-mongoose.connect(process.env.MONGO_URI).then(() => console.log('🍃 DB Connected')).catch(err => console.error(err));
+mongoose.connect(process.env.MONGO_URI).then(() => console.log('🍃 DB Connected'));
 
 const chatSchema = new mongoose.Schema({
     sessionId: String,
+    title: { type: String, default: "New Session" },
     messages: [{ role: String, content: String, image: String }]
 });
 const Chat = mongoose.model('Chat', chatSchema);
 
-// --- موڈ کے حساب سے سسٹم پرامپٹ بنانا ---
-const getSystemPrompt = (mode) => {
-    if (mode === 'pro') {
-        return `You are now in 'Thinking Mode' (Pro Coder). 
-        1. Think deeply before answering. 
-        2. Provide detailed explanations and full working scripts. 
-        3. Acknowledge that you are currently in Pro/Thinking mode.
-        4. Use natural Pakistani Urdu if the user speaks Urdu.`;
-    } else {
-        return `You are now in 'Fast Chat Mode' (Guddu AI). 
-        1. Respond as FAST as possible. 
-        2. Keep answers short, witty, and to the point. 
-        3. Acknowledge that you are in Chat/Fast mode.
-        4. Use emojis and be friendly.`;
-    }
-};
+const MASTER_PROMPT = `Your name is 'Pro Coder'. 
+- Respond in the SAME language as the user. Default is English.
+- Chat Mode: Fast, witty, direct scripts.
+- Thinking Mode: Deep analysis, full step-by-step logic.
+- Imaging: Analyze numbers/text precisely.`;
 
 app.post('/api/chat', async (req, res) => {
     const { message, sessionId, mode, image } = req.body;
     try {
-        let userChat = await Chat.findOne({ sessionId }) || new Chat({ sessionId, messages: [] });
+        let userChat = await Chat.findOne({ sessionId });
+        if (!userChat) {
+            // پہلی بار ٹائٹل میسج سے بنانا
+            const title = message.substring(0, 25) + "...";
+            userChat = new Chat({ sessionId, title, messages: [] });
+        }
+
         const modelName = image ? "llava" : "gemma2:27b";
-        
-        // اے آئی کو بتانا کہ وہ اس وقت کس موڈ میں ہے
-        const currentInstruction = getSystemPrompt(mode);
-        const history = [{ role: 'system', content: currentInstruction }, ...userChat.messages.slice(-6)];
+        const history = [{ role: 'system', content: MASTER_PROMPT }, ...userChat.messages.slice(-8)];
 
         const aiResponse = await axios.post(`${process.env.OLLAMA_URL}/api/chat`, {
             model: modelName,
             messages: [...history, { role: 'user', content: message, images: image ? [image] : [] }],
             stream: true,
-            keep_alive: "24h",
-            options: { 
-                num_ctx: 32768, 
-                temperature: mode === 'pro' ? 0.4 : 0.8, // چیٹ موڈ میں تھوڑا زیادہ کریٹیو اور فاسٹ
-                top_p: 0.9 
-            }
+            keep_alive: "24h"
         }, { responseType: 'stream' });
 
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         let fullReply = "";
         aiResponse.data.on('data', chunk => {
-            const lines = chunk.toString().split('\n');
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    const content = JSON.parse(line).message.content;
-                    fullReply += content;
-                    res.write(content);
-                } catch (e) {}
-            }
+            try {
+                const content = JSON.parse(chunk.toString().split('\n')[0]).message.content;
+                fullReply += content;
+                res.write(content);
+            } catch (e) {}
         });
 
         aiResponse.data.on('end', async () => {
@@ -76,17 +60,30 @@ app.post('/api/chat', async (req, res) => {
             await userChat.save();
             res.end();
         });
-    } catch (e) { res.status(500).end("Server error! Please try again."); }
+    } catch (e) { res.status(500).end("Error! AI is resting."); }
 });
 
+// --- ہسٹری مینجمنٹ ---
 app.get('/api/history', async (req, res) => {
-    const chats = await Chat.find({}, 'sessionId messages').sort({ _id: -1 }).limit(10);
+    const chats = await Chat.find({}, 'sessionId title').sort({ _id: -1 });
     res.json(chats);
 });
 
 app.get('/api/chat/:id', async (req, res) => {
     const chat = await Chat.findOne({ sessionId: req.params.id });
     res.json(chat);
+});
+
+// چیٹ ڈیلیٹ کرنا
+app.delete('/api/chat/:id', async (req, res) => {
+    await Chat.deleteOne({ sessionId: req.params.id });
+    res.json({ success: true });
+});
+
+// چیٹ کا نام بدلنا
+app.patch('/api/chat/:id', async (req, res) => {
+    await Chat.updateOne({ sessionId: req.params.id }, { title: req.body.title });
+    res.json({ success: true });
 });
 
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Pro Coder Ready`));
