@@ -1,89 +1,87 @@
 const chatWindow = document.getElementById('chat-window');
 const userInput = document.getElementById('user-input');
 const historyList = document.getElementById('history-list');
-const plusMenu = document.getElementById('plus-menu');
 const previewBox = document.getElementById('preview-box');
-const fileNameDisplay = document.getElementById('file-name-display');
+const fileLabel = document.getElementById('file-label');
 
 let sessionId = localStorage.getItem('active_id') || "S-" + Math.floor(Math.random() * 9999);
-let attachedImage = null;
-let attachedFileText = null;
+let attachedImg = null;
+let attachedFile = null;
+let attachedFileName = "";
 
-window.onload = () => { loadHistory(); if(localStorage.getItem('active_id')) loadChat(sessionId); };
+window.onload = loadHistory;
 
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('active'); }
-function toggleMenu() { plusMenu.style.display = plusMenu.style.display === 'block' ? 'none' : 'block'; }
-function closeMenu() { plusMenu.style.display = 'none'; }
+function toggleMenu() { document.getElementById('plus-menu').style.display = document.getElementById('plus-menu').style.display === 'block' ? 'none' : 'block'; }
+function closeMenu() { document.getElementById('plus-menu').style.display = 'none'; }
 
-function handleImage(event) {
+function previewImg(event) {
     const file = event.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            attachedImage = e.target.result.split(',')[1];
-            previewBox.style.display = 'block';
-            fileNameDisplay.innerText = "📸 Image attached";
-        };
-        reader.readAsDataURL(file);
-    }
+    const reader = new FileReader();
+    reader.onload = (e) => { 
+        attachedImg = e.target.result.split(',')[1];
+        previewBox.classList.remove('hidden');
+        fileLabel.innerText = "📸 Image: " + file.name;
+    };
+    reader.readAsDataURL(file);
 }
 
-function handleFile(event) {
+function previewFile(event) {
     const file = event.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            attachedFileText = e.target.result;
-            previewBox.style.display = 'block';
-            fileNameDisplay.innerText = "📄 " + file.name;
-        };
-        reader.readAsText(file);
-    }
+    attachedFileName = file.name;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        attachedFile = e.target.result;
+        previewBox.classList.remove('hidden');
+        fileLabel.innerText = "📄 File: " + file.name;
+    };
+    reader.readAsText(file);
 }
 
-function clearAttachments() {
-    attachedImage = null;
-    attachedFileText = null;
-    previewBox.style.display = 'none';
+function clearFiles() {
+    attachedImg = null; attachedFile = null; attachedFileName = "";
+    previewBox.classList.add('hidden');
 }
 
 async function sendMessage() {
     const text = userInput.value.trim();
-    if (!text && !attachedImage && !attachedFileText) return;
+    if (!text && !attachedImg && !attachedFile) return;
 
-    let userHTML = attachedImage ? `<img src="data:image/png;base64,${attachedImage}" class="w-full rounded mb-2">` : "";
-    userHTML += `<div>${text}</div>`;
+    // چیٹ میں ویژول اٹیچمنٹ دکھانا
+    let userHTML = "";
+    if (attachedImg) userHTML += `<img src="data:image/png;base64,${attachedImg}" class="w-full rounded-lg mb-2 border border-gray-600">`;
+    if (attachedFile) userHTML += `<div class="file-pill"><i class="fas fa-file-code"></i> ${attachedFileName} Attached</div>`;
+    userHTML += `<div>${text || "Analyze this."}</div>`;
+    
     appendBubble('user', userHTML);
 
-    const dataToSend = {
-        message: text,
-        sessionId,
+    const payload = { 
+        message: text, sessionId, 
         mode: document.getElementById('mode-selector').value,
-        image: attachedImage,
-        fileText: attachedFileText
+        image: attachedImg, 
+        fileText: attachedFile,
+        fileName: attachedFileName
     };
 
-    userInput.value = '';
-    userInput.style.height = 'auto';
-    clearAttachments();
+    userInput.value = ''; userInput.style.height = 'auto';
+    clearFiles();
 
-    const botDiv = appendBubble('bot', '<div class="animate-pulse">Thinking...</div>');
-    
-    const response = await fetch('/api/chat', {
+    const botDiv = appendBubble('bot', '<div class="animate-pulse">Gemma is thinking...</div>');
+    const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dataToSend)
+        body: JSON.stringify(payload)
     });
 
-    const reader = response.body.getReader();
-    let replyText = "";
+    const reader = res.body.getReader();
+    let reply = "";
     botDiv.innerHTML = "";
 
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        replyText += new TextDecoder().decode(value);
-        botDiv.innerHTML = marked.parse(replyText);
+        reply += new TextDecoder().decode(value);
+        botDiv.innerHTML = marked.parse(reply);
         chatWindow.scrollTop = chatWindow.scrollHeight;
         hljs.highlightAll();
     }
@@ -94,15 +92,14 @@ async function loadHistory() {
     const res = await fetch('/api/history');
     const data = await res.json();
     historyList.innerHTML = data.map(chat => `
-        <div onclick="loadChat('${chat.sessionId}')" class="p-2 bg-gray-800 rounded mb-1 truncate cursor-pointer hover:bg-gray-700">
+        <div onclick="loadChat('${chat.sessionId}')" class="p-2 bg-gray-800 rounded mb-1 truncate text-[10px] cursor-pointer hover:bg-gray-700 border-l-2 border-transparent hover:border-green-500">
             ${chat.title}
         </div>
     `).join('');
 }
 
 async function loadChat(id) {
-    sessionId = id;
-    localStorage.setItem('active_id', id);
+    sessionId = id; localStorage.setItem('active_id', id);
     chatWindow.innerHTML = '';
     const res = await fetch(`/api/chat/${id}`);
     const data = await res.json();
@@ -111,7 +108,7 @@ async function loadChat(id) {
 }
 
 function newChat() {
-    sessionId = "S-" + Math.floor(Math.random() * 10000);
+    sessionId = "S-" + Math.floor(Math.random() * 9999);
     localStorage.setItem('active_id', sessionId);
     chatWindow.innerHTML = '';
     if(window.innerWidth < 768) toggleSidebar();
@@ -124,8 +121,4 @@ function appendBubble(role, html) {
     chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
     return div;
-}
-// Register Service Worker for PWA
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js');
 }
